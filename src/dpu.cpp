@@ -1,115 +1,53 @@
-#include "dpu.hpp"
+#pragma once
 
-#include <algorithm>
-#include <cctype>
-#include <filesystem>
-#include <fstream>
-#include <string>
-#include <fstream>
-#include <string>
-#include <vector>
 #include <cstdint>
-
-namespace fs = std::filesystem;
+#include <string>
 
 namespace kr260 {
 
-static std::string lowercase(
-    std::string value)
-{
-    std::transform(
-        value.begin(),
-        value.end(),
-        value.begin(),
-        [](unsigned char c)
-        {
-            return static_cast<char>(
-                std::tolower(c));
-        });
+enum class DPUState {
+    Unavailable,
+    InstalledNotLoaded,
+    Loaded
+};
 
-    return value;
-}
+struct DPUInfo {
+    bool detected = false;
 
-DPU::DPU()
-{
-    discover();
-}
+    DPUState state = DPUState::Unavailable;
 
-void DPU::discover()
-{
-    info_ = DPUInfo{};
+    std::string device;
+    std::string path;
 
-    const std::vector<std::string> bases =
-    {
-        "/sys/class/accel",
-        "/sys/class/misc",
-        "/sys/bus/platform/devices",
-        "/sys/bus/amba/devices"
-    };
+    std::string architecture;
+    std::string status;
 
-    for (const auto& base : bases)
-    {
-        std::error_code ec;
+    double frequency_mhz = 0.0;
 
-        if (!fs::exists(base, ec))
-            continue;
+    // -1.0 means unavailable.
+    double utilization_percent = -1.0;
 
-        for (const auto& entry :
-             fs::directory_iterator(base, ec))
-        {
-            if (ec)
-                break;
+    // Valid only when connected to a real DPU/XRT counter.
+    uint64_t jobs = 0;
 
-            std::string name =
-                entry.path().filename().string();
+    // Valid only when connected to a real DPU performance counter.
+    double latency_ms = 0.0;
+};
 
-            std::string lower =
-                lowercase(name);
+class DPU {
+public:
+    DPU();
 
-            if (lower.find("dpu") ==
-                std::string::npos)
-            {
-                continue;
-            }
+    // Refresh DPU/XRT state.
+    void update();
 
-            info_.detected = true;
-            info_.device = name;
-            info_.path =
-                entry.path().string();
+    // Return current DPU information.
+    const DPUInfo& info() const;
 
-            info_.status = "DETECTED";
+private:
+    DPUInfo info_;
 
-            /*
-             * Do not guess architecture,
-             * frequency or utilization.
-             *
-             * These values depend on the actual
-             * DPU overlay/design and XRT/Vitis-AI
-             * stack installed on the KR260.
-             */
-
-            return;
-        }
-    }
-}
-
-void DPU::update()
-{
-    /*
-     * Discovery is cheap, but we don't need to
-     * rediscover the whole sysfs tree every refresh.
-     *
-     * For now the monitor keeps the discovered
-     * information.
-     *
-     * Later this function can read actual DPU/XRT
-     * performance counters.
-     */
-}
-
-const DPUInfo& DPU::info() const
-{
-    return info_;
-}
+    void discover();
+};
 
 }
